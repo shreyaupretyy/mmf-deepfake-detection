@@ -16,9 +16,9 @@ FREQ_DIM = 128        # Azimuthal power spectrum (was 4)
 SEMANTIC_DIM = 768    # CLIP ViT-B/32 output
 
 # ── Model architecture (must match checkpoint) ──────────────────────────────
-HIDDEN_DIM1 = 512
-HIDDEN_DIM2 = 256
-DROPOUT = 0.5
+HIDDEN_DIM1 = 768
+HIDDEN_DIM2 = 384
+DROPOUT = 0.4
 
 # ── Face detection ──────────────────────────────────────────────────────────
 FACE_SIZE = 299

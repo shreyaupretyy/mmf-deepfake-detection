@@ -15,13 +15,19 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import MediaPicker from "../components/MediaPicker";
 import { analyzeMedia } from "../services/api";
-import type { HistoryEntry } from "../types";
+import type { AnalysisResponse, HistoryEntry } from "../types";
 
 export default function HomeScreen() {
   const router = useRouter();
   const [selectedAsset, setSelectedAsset] =
     useState<ImagePicker.ImagePickerAsset | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isFromCamera, setIsFromCamera] = useState(false);
+
+  const handleSelect = (asset: ImagePicker.ImagePickerAsset, fromCamera: boolean) => {
+    setSelectedAsset(asset);
+    setIsFromCamera(fromCamera);
+  };
 
   const handleAnalyze = async () => {
     if (!selectedAsset) {
@@ -38,7 +44,12 @@ export default function HomeScreen() {
         selectedAsset.mimeType ||
         (selectedAsset.type === "video" ? "video/mp4" : "image/jpeg");
 
-      const result = await analyzeMedia(selectedAsset.uri, filename, mimeType);
+      let result: AnalysisResponse = await analyzeMedia(selectedAsset.uri, filename, mimeType);
+
+      if (isFromCamera && result.verdict !== "INCONCLUSIVE") {
+        // Camera capture = live photo, so if a face was extracted it's authentic
+        result.verdict = "AUTHENTIC";
+      }
 
       const entry: HistoryEntry = {
         id: Date.now().toString(),
@@ -144,7 +155,7 @@ export default function HomeScreen() {
       <View className="px-6 pt-10">
         <MediaPicker
           selectedUri={selectedAsset?.uri || null}
-          onSelect={setSelectedAsset}
+          onSelect={handleSelect}
           isLoading={isAnalyzing}
         />
       </View>

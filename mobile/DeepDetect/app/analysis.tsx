@@ -3,30 +3,8 @@ import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import VerdictBadge from "../components/VerdictBadge";
-import ConfidenceGauge from "../components/ConfidenceGauge";
 import DomainBreakdown from "../components/DomainBreakdown";
 import type { AnalysisResponse } from "../types";
-
-const RISK_CONFIG = {
-  HIGH: {
-    color: "#EF4444",
-    bg: "#FEF2F2",
-    border: "#FECACA",
-    icon: "alert-circle" as const,
-  },
-  MEDIUM: {
-    color: "#F59E0B",
-    bg: "#FFFBEB",
-    border: "#FDE68A",
-    icon: "warning" as const,
-  },
-  LOW: {
-    color: "#10B981",
-    bg: "#ECFDF5",
-    border: "#A7F3D0",
-    icon: "checkmark-circle" as const,
-  },
-};
 
 export default function AnalysisScreen() {
   const { data, filename } = useLocalSearchParams<{
@@ -44,7 +22,6 @@ export default function AnalysisScreen() {
   }
 
   const result: AnalysisResponse = JSON.parse(data);
-  const risk = RISK_CONFIG[result.risk_level];
 
   return (
     <ScrollView className="flex-1 bg-surface-base" bounces={false}>
@@ -66,34 +43,7 @@ export default function AnalysisScreen() {
         </View>
 
         {/* Verdict */}
-        <VerdictBadge
-          verdict={result.verdict}
-          confidence={result.confidence}
-        />
-
-        {/* Confidence Gauge */}
-        <View className="mt-8 items-center">
-          <ConfidenceGauge
-            confidence={result.confidence}
-            verdict={result.verdict}
-          />
-        </View>
-
-        {/* Risk Level */}
-        <View
-          className="mt-6 flex-row items-center justify-center rounded-xl px-5 py-3.5"
-          style={{
-            backgroundColor: risk.bg,
-            borderWidth: 1,
-            borderColor: risk.border,
-          }}
-        >
-          <Ionicons name={risk.icon} size={18} color={risk.color} />
-          <Text className="ml-2 text-sm text-ink-secondary">Risk Level: </Text>
-          <Text className="text-sm font-bold" style={{ color: risk.color }}>
-            {result.risk_level}
-          </Text>
-        </View>
+        <VerdictBadge verdict={result.verdict} />
 
         {/* Domain Breakdown */}
         <View className="mt-6">

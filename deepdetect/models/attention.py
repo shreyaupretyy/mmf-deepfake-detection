@@ -62,7 +62,7 @@ class SelfAttention(nn.Module):
     def forward(self, x):
         B, D = x.size()
 
-        x = x.unsqueeze(1)  # (B, 1, D)
+        x = x.unsqueeze(1)
         qkv = self.qkv(x).reshape(B, 1, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]
 
@@ -78,27 +78,35 @@ class SelfAttention(nn.Module):
 class DomainAttentionFusion(nn.Module):
     """Learnable attention-based fusion with temperature scaling."""
 
-    def __init__(self, spatial_dim, freq_dim, semantic_dim, fusion_dim=512):
+    def __init__(self, spatial_dim, freq_dim, semantic_dim, fusion_dim=768):
         super().__init__()
 
-        self.spatial_proj = nn.Linear(spatial_dim, fusion_dim)
-        self.freq_proj = nn.Linear(freq_dim, fusion_dim)
-        self.semantic_proj = nn.Linear(semantic_dim, fusion_dim)
+        self.spatial_proj = nn.Sequential(
+            nn.Linear(spatial_dim, fusion_dim),
+            nn.BatchNorm1d(fusion_dim),
+        )
+        self.freq_proj = nn.Sequential(
+            nn.Linear(freq_dim, fusion_dim),
+            nn.BatchNorm1d(fusion_dim),
+        )
+        self.semantic_proj = nn.Sequential(
+            nn.Linear(semantic_dim, fusion_dim),
+            nn.BatchNorm1d(fusion_dim),
+        )
 
         self.domain_attention = nn.Sequential(
-            nn.Linear(fusion_dim * 3, 256),
+            nn.Linear(fusion_dim * 3, fusion_dim // 2),
             nn.ReLU(),
             nn.Dropout(0.3),
-            nn.Linear(256, 3),
+            nn.Linear(fusion_dim // 2, 3),
         )
 
         self.fusion = nn.Sequential(
             nn.Linear(fusion_dim, fusion_dim),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Dropout(0.3),
         )
 
-        # Temperature > 1 spreads attention across domains (prevents collapse)
         self.temperature = nn.Parameter(torch.tensor(2.0))
 
     def forward(self, spatial_feat, freq_feat, semantic_feat):
@@ -115,7 +123,6 @@ class DomainAttentionFusion(nn.Module):
         temp = self.temperature.clamp(min=0.5)
         domain_weights = torch.softmax(attention_logits / temp, dim=1)
 
-        # Check for NaN and replace with uniform weights
         if torch.isnan(domain_weights).any():
             domain_weights = torch.ones_like(domain_weights) / 3.0
 
@@ -126,21 +133,10 @@ class DomainAttentionFusion(nn.Module):
 
 
 class CompleteAttentionModel(nn.Module):
-    """
-    Complete 3-domain attention model for deepfake detection.
-
-    Domains:
-        - Spatial (Xception, 2048-dim) with SE channel attention
-        - Frequency (azimuthal power spectrum, 128-dim) with SE attention
-        - Semantic (CLIP ViT-B/32, 768-dim) with self-attention
-
-    Fusion: learnable domain-level attention with temperature scaling.
-    Training: domain dropout prevents semantic dominance.
-    Output: single logit (use sigmoid for probability).
-    """
+    """Complete 3-domain attention model for deepfake detection."""
 
     def __init__(self, spatial_dim, freq_dim, semantic_dim,
-                 hidden_dim1=512, hidden_dim2=256, dropout=0.5):
+                 hidden_dim1=768, hidden_dim2=384, dropout=0.4):
         super().__init__()
 
         self.spatial_attention = ChannelAttention(spatial_dim, reduction=16)
@@ -150,17 +146,21 @@ class CompleteAttentionModel(nn.Module):
         self.fusion = DomainAttentionFusion(spatial_dim, freq_dim, semantic_dim, hidden_dim1)
 
         self.classifier = nn.Sequential(
+            nn.BatchNorm1d(hidden_dim1),
             nn.Linear(hidden_dim1, hidden_dim2),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Dropout(dropout),
-            nn.Linear(hidden_dim2, 1),
+            nn.BatchNorm1d(hidden_dim2),
+            nn.Linear(hidden_dim2, hidden_dim2 // 2),
+            nn.GELU(),
+            nn.Dropout(dropout * 0.5),
+            nn.Linear(hidden_dim2 // 2, 1),
         )
 
         self.last_domain_weights = None
         self.last_spatial_weights = None
         self.last_freq_weights = None
 
-        # Domain dropout: randomly drop domains during training
         self.domain_dropout_prob = 0.15
 
     def forward(self, spatial, freq, semantic):
@@ -171,7 +171,6 @@ class CompleteAttentionModel(nn.Module):
         self.last_spatial_weights = spatial_weights.detach()
         self.last_freq_weights = freq_weights.detach()
 
-        # Domain dropout during training: force all domains to learn
         if self.training:
             drop_mask = torch.rand(3) > self.domain_dropout_prob
             if not drop_mask.any():

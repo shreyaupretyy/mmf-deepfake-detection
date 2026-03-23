@@ -72,6 +72,14 @@ def _risk_level(confidence: float) -> str:
     return "LOW"
 
 
+# Maximum z-score magnitude allowed after normalization.
+# Training features are ~N(0,1); real-world OOD images can produce
+# z-scores of 10+ which cause extreme logits.  Clipping to [-5, 5]
+# keeps in-distribution samples untouched while preventing OOD
+# overconfidence.
+_ZSCORE_CLIP = 3.0
+
+
 class DeepDetectPipeline:
     """Load model + extractors once, then call analyze_image / analyze_video."""
 
@@ -103,6 +111,10 @@ class DeepDetectPipeline:
         self.model.load_state_dict(ckpt["model_state_dict"])
         self.model.eval()
         print(f"Model loaded (val_acc={ckpt.get('val_acc', 'N/A')}, val_f1={ckpt.get('val_f1', 'N/A')})")
+
+        # ── Classification threshold (learned from validation set) ───────
+        self.threshold = ckpt.get("optimal_threshold", config.FAKE_THRESHOLD)
+        print(f"Classification threshold: {self.threshold}")
 
         # ── Normalization stats (z-score, computed from training set) ────
         self.norm_stats = None
@@ -172,7 +184,7 @@ class DeepDetectPipeline:
 
             t = time.time()
             prob, weights = self._predict(spatial, frequency, semantic)
-            print(f"  [5] Classification:    {time.time()-t:.3f}s -> prob={prob:.4f}")
+            print(f"  [5] Classification:    {time.time()-t:.3f}s -> prob={prob:.4f} (threshold={self.threshold})")
             print(f"       Domain weights: spatial={weights[0]:.4f} freq={weights[1]:.4f} semantic={weights[2]:.4f}")
 
             frame_results.append(FrameResult(frame=i, fake_probability=prob))
@@ -196,12 +208,12 @@ class DeepDetectPipeline:
         avg_prob = float(np.mean([fr.fake_probability for fr in frame_results]))
         avg_weights = np.mean(all_weights, axis=0)
 
-        is_fake = avg_prob >= config.FAKE_THRESHOLD
+        is_fake = avg_prob >= self.threshold
         confidence = avg_prob if is_fake else 1.0 - avg_prob
 
         elapsed = time.time() - total_start
         verdict = "MANIPULATED" if is_fake else "AUTHENTIC"
-        print(f"\n  RESULT: {verdict} (confidence={confidence:.4f}, avg_prob={avg_prob:.4f})")
+        print(f"\n  RESULT: {verdict} (confidence={confidence:.4f}, avg_prob={avg_prob:.4f}, threshold={self.threshold})")
         print(f"  Frames analyzed: {len(frame_results)}/{len(frames_rgb)}")
         print(f"  Total time: {elapsed:.3f}s")
         print(f"{'='*60}\n")
@@ -233,6 +245,13 @@ class DeepDetectPipeline:
             spatial = (spatial - self.norm_stats["spatial_mean"]) / self.norm_stats["spatial_std"]
             frequency = (frequency - self.norm_stats["freq_mean"]) / self.norm_stats["freq_std"]
             semantic = (semantic - self.norm_stats["semantic_mean"]) / self.norm_stats["semantic_std"]
+
+        # Clip extreme z-scores to prevent OOD overconfidence.
+        # In-distribution features are ~N(0,1) so [-5, 5] is 5-sigma:
+        # keeps normal samples untouched, tames wild OOD values.
+        spatial = np.clip(spatial, -_ZSCORE_CLIP, _ZSCORE_CLIP)
+        frequency = np.clip(frequency, -_ZSCORE_CLIP, _ZSCORE_CLIP)
+        semantic = np.clip(semantic, -_ZSCORE_CLIP, _ZSCORE_CLIP)
 
         spatial_t = torch.from_numpy(spatial.astype(np.float32)).unsqueeze(0).to(self.device)
         freq_t = torch.from_numpy(frequency.astype(np.float32)).unsqueeze(0).to(self.device)

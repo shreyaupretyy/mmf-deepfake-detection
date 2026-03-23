@@ -3,7 +3,6 @@ import { Ionicons } from "@expo/vector-icons";
 
 interface Props {
   verdict: "AUTHENTIC" | "MANIPULATED" | "INCONCLUSIVE";
-  confidence: number;
 }
 
 const VERDICT_CONFIG = {
@@ -33,9 +32,8 @@ const VERDICT_CONFIG = {
   },
 };
 
-export default function VerdictBadge({ verdict, confidence }: Props) {
+export default function VerdictBadge({ verdict }: Props) {
   const cfg = VERDICT_CONFIG[verdict];
-  const pct = Math.round(confidence * 100);
 
   return (
     <View
@@ -54,9 +52,6 @@ export default function VerdictBadge({ verdict, confidence }: Props) {
       </View>
       <Text className="text-2xl font-bold" style={{ color: cfg.color }}>
         {cfg.label}
-      </Text>
-      <Text className="mt-1.5 text-sm font-medium text-ink-secondary">
-        {pct}% confidence
       </Text>
       <Text className="mt-1 text-xs text-ink-muted">{cfg.subtitle}</Text>
     </View>

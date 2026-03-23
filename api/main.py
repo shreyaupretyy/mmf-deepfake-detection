@@ -29,8 +29,16 @@ app.add_middleware(
 
 pipeline: DeepDetectPipeline | None = None
 
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"}
-VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
+IMAGE_EXTENSIONS = {
+    ".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff", ".tif",
+    ".gif", ".ico", ".svg", ".heic", ".heif", ".avif", ".raw",
+    ".cr2", ".nef", ".arw", ".dng", ".jfif", ".pjpeg", ".pjp",
+}
+VIDEO_EXTENSIONS = {
+    ".mp4", ".avi", ".mov", ".mkv", ".webm", ".flv", ".wmv",
+    ".m4v", ".mpg", ".mpeg", ".3gp", ".3g2", ".ts", ".mts",
+    ".vob", ".ogv", ".asf",
+}
 
 
 @app.on_event("startup")

@@ -4,7 +4,10 @@ import { AnalysisResponse } from "../types";
 // Change this to your server's address.
 // For local dev with Expo Go on a physical device, use your machine's LAN IP.
 // For emulator: Android uses 10.0.2.2, iOS uses localhost.
-const API_BASE = "http://192.168.1.12:8000";
+// Web uses localhost; mobile devices need the PC's LAN IP
+const API_BASE = Platform.OS === "web"
+  ? "http://localhost:8000"
+  : "http://192.168.1.12:8000";
 
 export async function analyzeMedia(
   fileUri: string,
